@@ -1,5 +1,9 @@
-input/
+data/
 output/
 *.env
 *.err
 *.out
+.conda/
+__pycache__/
+*.egg-info/
+.ipynb_checkpoints/
