@@ -38,26 +38,3 @@ The directory structure is organized following the [Python Data Science Project 
 |- output/                       # Backwards-compatible outputs directory
 ```
 
-## Setup & Installation
-
-### 1. Set Up Conda Environment
-Create or activate the conda environment using the provided `environment.yml` file:
-```bash
-conda env create -f environment.yml
-# Or if it already exists, activate it:
-conda activate /scratch/rprest2/Spatial-MetScore/.conda/Spatial
-```
-
-### 2. Install the local `spatial_metscore` package
-Install the local custom package in **editable mode** within the active conda environment. This allows you to import functions (e.g. `from spatial_metscore import analyze_sample`) from any notebook or script regardless of your current directory:
-```bash
-pip install -e spatial_metscore/
-```
-
-## Running the Analyses
-
-- **Preprocess reference atlas**: Submit the reference preparation job to the cluster using:
-  ```bash
-  sbatch scripts/submit_ref.sh
-  ```
-- **Run notebooks**: Launch Jupyter Notebook or JupyterLab and navigate to `notebooks/` to run step-by-side visualizations, MetScore profiling, and deconvolution analyses.

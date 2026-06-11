@@ -4,7 +4,7 @@ import numpy as np
 import pandas as pd
 from scipy.stats import rankdata
 
-def RankAndScore(adata, upSet, downSet, layer="X"):
+def  RankAndScore(adata, upSet, downSet, layer="X"):
     """
     Calculate a rank-based gene signature score (singscore) natively in Python.
 
