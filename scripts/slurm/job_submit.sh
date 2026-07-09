@@ -25,6 +25,6 @@ source ~/.bashrc
 conda activate Spatial
 
 # Run the Python script
-python /scratch/rprest2/Spatial-MetScore/scripts/01_metscore_analysis.py
+python /scratch/rprest2/Spatial-MetScore/scripts/00_download_references.py
 
 echo "Spatial MetScore Analysis complete."

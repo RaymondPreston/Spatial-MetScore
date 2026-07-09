@@ -1,0 +1,182 @@
+---
+title: "Tumor Purity"
+output: pdf_document
+date: "2026-07-02"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$setq(echo = TRUE)
+library(Seurat)
+library(estimate)
+library(patchwork)
+library(ggplot2)
+```
+
+# Tumor Purity Analysis
+
+This is an R Markdown document for analyzing tumor purity using the ESTIMATE package by MD Anderson.
+
+## Single Sample Analysis
+
+Data input and output paths are set, and the necessary directories are created if they do not exist. The sample names are extracted from the raw data directory.
+
+```{r}
+sample_id <- "PT-1A"  
+
+
+base_dir <- "/scratch/hhuan40/Spatial-MetScore"
+raw_dir <- file.path(base_dir, "data", "raw", "Samples", sample_id)
+out_dir <- file.path(base_dir, "data", "processed", "tumor_purity_estimate")
+
+# make a new directory for the output if it doesn't exist
+if (!dir.exists(out_dir)) {
+  dir.create(out_dir, recursive = TRUE)
+}
+
+message("Dealing with: ", sample_id)
+```
+
+Load the data and perform normalization using Seurat's `Load10X_Spatial` and `NormalizeData` functions. The expression matrix is then extracted for use with the ESTIMATE algorithm.
+
+```{r}
+seurat_obj <- Load10X_Spatial(data.dir = raw_dir)
+seurat_obj <- NormalizeData(seurat_obj)
+```
+
+Extract the expression matrix and save it to a temporary file for the ESTIMATE algorithm. The `filterCommonGenes` and `estimateScore` functions from the ESTIMATE package are then used to calculate the stromal, immune, and ESTIMATE scores.
+
+```{r}
+expr_mat <- as.matrix(GetAssayData(seurat_obj, assay = "Spatial", layer = "data"))
+
+# set temporary file paths for ESTIMATE input and output
+mat_file <- file.path(out_dir, paste0(sample_id, "_matrix.txt"))
+common_file <- file.path(out_dir, paste0(sample_id, "_common.gct"))
+score_file <- file.path(out_dir, paste0(sample_id, "_estimate_scores.gct"))
+
+# output the expression matrix to a tab-delimited text file
+write.table(expr_mat, file = mat_file, sep = "\t", quote = FALSE)
+```
+
+Ran the ESTIMATE algorithm to calculate stromal, immune, and ESTIMATE scores. The results are then read back into R and added to the Seurat object.
+
+```{r}
+# ESTIMATE 
+filterCommonGenes(input.f = mat_file, output.f = common_file, id = "GeneSymbol")
+estimateScore(input.ds = common_file, output.ds = score_file, platform = "illumina")
+```
+
+```{r}
+# Conversion Tumor Purity and add to Seurat
+scores <- read.table(score_file, skip = 2, header = TRUE, row.names = 1)
+scores_t <- as.data.frame(t(scores[, -1])) 
+
+seurat_obj$StromalScore <- scores_t$StromalScore
+seurat_obj$ImmuneScore <- scores_t$ImmuneScore
+seurat_obj$ESTIMATEScore <- scores_t$ESTIMATEScore
+
+# Apply the purity conversion formula.
+seurat_obj$TumorPurity <- cos(0.6049872018 + 0.0001467884 * seurat_obj$ESTIMATEScore)
+```
+
+Drawing the plot that is required: on the left is the original H&E image, and on the right is the tumor purity heatmap. The `patchwork` package is used to combine the two plots side by side.
+
+```{r}
+plot_he <- SpatialDimPlot(seurat_obj, alpha = c(0, 0)) + 
+  NoLegend() + 
+  ggtitle(paste(sample_id, "- H&E Tissue"))
+
+plot_purity <- SpatialFeaturePlot(seurat_obj, features = "TumorPurity", image.alpha = 0) + 
+  ggtitle("Calculated Tumor Purity")
+
+# patchwork
+final_plot <- plot_he | plot_purity
+
+print(final_plot)
+```
+
+Save all the results, including the final high-resolution image and the processed Seurat object as an RDS file.
+
+```{r}
+ggsave(filename = file.path(out_dir, paste0(sample_id, "_purity_map.png")), 
+       plot = final_plot, width = 12, height = 5)
+
+saveRDS(seurat_obj, file = file.path(out_dir, paste0(sample_id, "_processed.rds")))
+
+message("Done analyzing. Go to ", out_dir, " to check the results.")
+```
+
+## Loop through all samples
+
+
+```{r data}
+base_dir <- "/scratch/hhuan40/Spatial-MetScore"
+raw_dir <- file.path(base_dir, "data", "raw", "Samples")
+main_out_dir <- file.path(base_dir, "data", "processed", "tumor_purity_estimate")
+
+sample_names <- list.dirs(raw_dir, full.names = FALSE, recursive = FALSE)
+
+print(sample_names)
+```
+
+We will now use a for loop to iterate through each sample and calculate the tumor purity using the ESTIMATE package.
+
+```{r estimate_loop}
+for (sample_id in sample_names) {
+  message(sprintf("========================================"))
+  message(sprintf("Now dealing: %s", sample_id))
+  
+  # create a dedicated output directory for each sample
+  sample_out_dir <- file.path(main_out_dir, sample_id)
+  if (!dir.exists(sample_out_dir)) {
+    dir.create(sample_out_dir, recursive = TRUE)
+  }
+  
+  # load the Seurat object for the current sample
+  sample_raw_dir <- file.path(raw_dir, sample_id)
+  seurat_obj <- Load10X_Spatial(data.dir = sample_raw_dir)
+  seurat_obj <- NormalizeData(seurat_obj)
+  
+  # extract the expression matrix for the current sample
+  expr_mat <- as.matrix(GetAssayData(seurat_obj, assay = "Spatial", layer = "data"))
+  
+  # setting
+  mat_file <- file.path(sample_out_dir, paste0(sample_id, "_matrix.txt"))
+  common_file <- file.path(sample_out_dir, paste0(sample_id, "_common.gct"))
+  score_file <- file.path(sample_out_dir, paste0(sample_id, "_estimate_scores.gct"))
+  rds_file <- file.path(sample_out_dir, paste0(sample_id, "_processed.rds"))
+  plot_file <- file.path(sample_out_dir, paste0(sample_id, "_purity_map.png"))
+  
+  # Export expression matrix
+  write.table(expr_mat, file = mat_file, sep = "\t", quote = FALSE)
+  
+  # Runnign ESTIMATE algorithm
+  filterCommonGenes(input.f = mat_file, output.f = common_file, id = "GeneSymbol")
+  estimateScore(input.ds = common_file, output.ds = score_file, platform = "illumina")
+  
+  # Conversion Tumor Purity and add to Seurat
+  scores <- read.table(score_file, skip = 2, header = TRUE, row.names = 1)
+  scores_t <- as.data.frame(t(scores[, -1])) 
+  
+  seurat_obj$StromalScore <- scores_t$StromalScore
+  seurat_obj$ImmuneScore <- scores_t$ImmuneScore
+  seurat_obj$ESTIMATEScore <- scores_t$ESTIMATEScore
+  seurat_obj$TumorPurity <- cos(0.6049872018 + 0.0001467884 * seurat_obj$ESTIMATEScore)
+  
+  # Draw the plot
+  plot_he <- SpatialDimPlot(seurat_obj, alpha = c(0, 0)) + 
+    NoLegend() + 
+    ggtitle(paste(sample_id, "- H&E Tissue"))
+  
+  plot_purity <- SpatialFeaturePlot(seurat_obj, features = "TumorPurity", image.alpha = 0, pt.size.factor = 1.2) + 
+    ggtitle("Calculated Tumor Purity")
+  
+  final_plot <- plot_he | plot_purity
+  
+  
+  # Save the results
+  ggsave(filename = plot_file, plot = final_plot, width = 12, height = 5)
+  saveRDS(seurat_obj, file = rds_file)
+  
+  message(sprintf("Sample %s processing completed! Files saved to: %s", sample_id, sample_out_dir))
+}
+```
